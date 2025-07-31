@@ -13,12 +13,16 @@ export type ButtonVariant = 'normal' | 'muted' | 'heart' | 'success';
       <a
         [routerLink]="routerLink()"
         [class]="buttonClasses()"
+        role="button"
+        [attr.aria-label]="getAriaLabel()"
+        [attr.aria-disabled]="disabled()"
       >
         @if (variant() === 'heart') {
           <!-- Heart Icon -->
-          <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="wishlisted() ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="wishlisted() ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
           </svg>
+          <span class="sr-only">{{ wishlisted() ? 'Remove from wishlist' : 'Add to wishlist' }}</span>
         } @else {
           <ng-content></ng-content>
         }
@@ -30,12 +34,15 @@ export type ButtonVariant = 'normal' | 'muted' | 'heart' | 'success';
         (click)="buttonClick.emit()"
         [class]="buttonClasses()"
         [disabled]="disabled()"
+        [attr.aria-label]="getAriaLabel()"
+        [attr.aria-pressed]="variant() === 'heart' ? wishlisted() : null"
       >
         @if (variant() === 'heart') {
           <!-- Heart Icon -->
-          <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="wishlisted() ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="wishlisted() ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
           </svg>
+          <span class="sr-only">{{ wishlisted() ? 'Remove from wishlist' : 'Add to wishlist' }}</span>
         } @else {
           <ng-content></ng-content>
         }
@@ -186,28 +193,27 @@ export type ButtonVariant = 'normal' | 'muted' | 'heart' | 'success';
     .custom-button.success[aria-disabled="true"]:hover {
       background-color: #dcfce7;
     }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
   `]
 })
 export class CustomButtonComponent {
-  // Input for router link (optional)
   routerLink = input<string | null>(null);
-
-  // Input for button variant
   variant = input<ButtonVariant>('normal');
-
-  // Input for disabled state
   disabled = input<boolean>(false);
-
-  // Input for additional CSS classes
   additionalClasses = input<string>('');
-
-  // Input for wishlisted state (for heart variant)
   wishlisted = input<boolean>(false);
-
-  // Output for button click events
   buttonClick = output<void>();
-
-  // Computed button classes
   protected buttonClasses = (): string => {
     const baseClass = 'custom-button';
     const variantClass = this.variant();
@@ -215,5 +221,12 @@ export class CustomButtonComponent {
     const wishlistedClass = this.variant() === 'heart' && this.wishlisted() ? 'wishlisted' : '';
 
     return `${baseClass} ${variantClass} ${wishlistedClass} ${additional}`.trim();
+  };
+
+  getAriaLabel = (): string => {
+    if (this.variant() === 'heart') {
+      return this.wishlisted() ? 'Remove from wishlist' : 'Add to wishlist';
+    }
+    return '';
   };
 }

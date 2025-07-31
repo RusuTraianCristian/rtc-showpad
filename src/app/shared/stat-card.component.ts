@@ -12,15 +12,8 @@ import { Component, input, ChangeDetectionStrategy } from '@angular/core';
   `
 })
 export class StatCardComponent {
-  // Input for the card title
   title = input.required<string>();
-
-  // Input for the main number/value to display
   value = input.required<number>();
-
-  // Input for the description text below the value
   description = input.required<string>();
-
-  // Input for the color of the number text
   numberColor = input<string>('#374151'); // default gray color
 }

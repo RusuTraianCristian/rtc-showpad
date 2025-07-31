@@ -141,8 +141,6 @@ import { UserPokemon } from '../core';
 })
 export class DashboardOverviewComponent {
   protected appState = inject(AppStateService);
-
-  // Computed signals for UI logic
   showUserModal = computed(() =>
     !this.appState.userLoading() && !this.appState.hasUser()
   );
@@ -152,11 +150,8 @@ export class DashboardOverviewComponent {
   );
 
   onUserSaved(userName: string): void {
-    console.log('User saved from modal:', userName);
     this.appState.setUser(userName);
   }
-
-  // Test methods for Pokemon operations (for demonstration)
   testAddCaughtPokemon(): void {
     const testPokemon: UserPokemon = {
       id: 25,

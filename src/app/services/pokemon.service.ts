@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, map, forkJoin, of, switchMap } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Observable, map, forkJoin, of, switchMap, timer } from 'rxjs';
+import { catchError, retry, timeout } from 'rxjs/operators';
 import {
   Pokemon,
   PokemonListItem,
@@ -16,43 +16,57 @@ import {
 export class PokemonService {
   private http = inject(HttpClient);
   private baseUrl = 'https://pokeapi.co/api/v2';
+  private readonly REQUEST_TIMEOUT = 10000;
+  private readonly MAX_RETRIES = 3;
 
-  /**
-   * Get a list of Pokemon with pagination
-   */
   getPokemonList(limit: number = 20, offset: number = 0): Observable<PokemonListResponse> {
     return this.http.get<PokemonListResponse>(`${this.baseUrl}/pokemon?limit=${limit}&offset=${offset}`)
       .pipe(
+        timeout(this.REQUEST_TIMEOUT),
+        retry({
+          count: this.MAX_RETRIES,
+          delay: (error, retryCount) => {
+            if (error.status === 429) {
+              return timer(Math.pow(2, retryCount) * 1000);
+            }
+            return timer(1000 * retryCount);
+          }
+        }),
         catchError(error => {
-          console.error('Error fetching Pokemon list:', error);
-          return of({ count: 0, next: null, previous: null, results: [] });
+          const errorMessage = this.getErrorMessage(error, 'fetch Pokemon list');
+          return of({ count: 0, next: null, previous: null, results: [], error: errorMessage });
         })
       );
   }
 
-  /**
-   * Get detailed information for a single Pokemon
-   */
   getPokemonDetails(nameOrId: string | number): Observable<Pokemon | null> {
     return this.http.get<PokemonDetails>(`${this.baseUrl}/pokemon/${nameOrId}`)
       .pipe(
+        timeout(this.REQUEST_TIMEOUT),
+        retry({
+          count: this.MAX_RETRIES,
+          delay: (error, retryCount) => {
+            if (error.status === 429) {
+              return timer(Math.pow(2, retryCount) * 1000);
+            }
+            return timer(1000 * retryCount);
+          }
+        }),
         map(details => this.transformPokemonDetails(details)),
         catchError(error => {
-          console.error(`Error fetching Pokemon details for ${nameOrId}:`, error);
+          if (error.status === 404) {
+            return of(null);
+          }
           return of(null);
         })
       );
   }
 
-  /**
-   * Get detailed information for multiple Pokemon with pagination metadata
-   */
   getPokemonListWithDetails(limit: number = 20, offset: number = 0): Observable<Pokemon[]> {
     return this.getPokemonList(limit, offset).pipe(
       switchMap(response => {
         if (!response.results.length) return of([]);
 
-        // Extract Pokemon IDs from URLs for more efficient fetching
         const pokemonRequests = response.results.map(pokemon => {
           const id = this.extractIdFromUrl(pokemon.url);
           return this.getPokemonDetails(id);
@@ -62,15 +76,11 @@ export class PokemonService {
       }),
       map((pokemonArray: (Pokemon | null)[]) => pokemonArray.filter((pokemon): pokemon is Pokemon => pokemon !== null)),
       catchError(error => {
-        console.error('Error fetching Pokemon list with details:', error);
         return of([]);
       })
     );
   }
 
-  /**
-   * Get detailed information for multiple Pokemon with pagination metadata
-   */
   getPokemonListWithPagination(limit: number = 20, offset: number = 0): Observable<PaginatedPokemonResponse> {
     return this.getPokemonList(limit, offset).pipe(
       switchMap(response => {
@@ -84,7 +94,6 @@ export class PokemonService {
           });
         }
 
-        // Extract Pokemon IDs from URLs for more efficient fetching
         const pokemonRequests = response.results.map(pokemon => {
           const id = this.extractIdFromUrl(pokemon.url);
           return this.getPokemonDetails(id);
@@ -104,7 +113,6 @@ export class PokemonService {
         );
       }),
       catchError(error => {
-        console.error('Error fetching Pokemon list with pagination:', error);
         return of({
           pokemon: [],
           count: 0,
@@ -116,21 +124,16 @@ export class PokemonService {
     );
   }
 
-  /**
-   * Search Pokemon by name
-   */
   searchPokemon(query: string): Observable<Pokemon[]> {
     if (!query.trim()) {
       return this.getPokemonListWithDetails(20, 0);
     }
 
-    // For simple search, we'll fetch a larger list and filter locally
-    // In a real app, you might want to implement server-side search
     return this.getPokemonList(1000, 0).pipe(
       switchMap(response => {
         const filteredResults = response.results.filter(pokemon =>
           pokemon.name.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 20); // Limit to 20 results
+        ).slice(0, 20);
 
         if (filteredResults.length === 0) return of([]);
 
@@ -143,15 +146,11 @@ export class PokemonService {
       }),
       map((pokemonArray: (Pokemon | null)[]) => pokemonArray.filter((pokemon): pokemon is Pokemon => pokemon !== null)),
       catchError(error => {
-        console.error('Error searching Pokemon:', error);
         return of([]);
       })
     );
   }
 
-  /**
-   * Transform API response to our Pokemon interface
-   */
   private transformPokemonDetails(details: PokemonDetails): Pokemon {
     return {
       id: details.id,
@@ -174,8 +173,7 @@ export class PokemonService {
         name: s.stat.name,
         baseStat: s.base_stat
       })),
-      moves: details.moves?.slice(0, 20).map(m => {
-        // Get the most recent version group details for level learned
+      moves: details.moves?.map(m => {
         const latestVersion = m.version_group_details[m.version_group_details.length - 1];
         return {
           name: m.move.name,
@@ -186,11 +184,28 @@ export class PokemonService {
     };
   }
 
-  /**
-   * Extract Pokemon ID from PokeAPI URL
-   */
   private extractIdFromUrl(url: string): number {
     const matches = url.match(/\/pokemon\/(\d+)\//);
     return matches ? parseInt(matches[1], 10) : 1;
+  }
+
+  private getErrorMessage(error: any, operation: string): string {
+    if (error.userMessage) {
+      return error.userMessage;
+    }
+
+    if (error.status === 0) {
+      return 'Network error. Please check your internet connection.';
+    }
+
+    if (error.status === 429) {
+      return 'API rate limit exceeded. Please wait before making more requests.';
+    }
+
+    if (error.status >= 500) {
+      return 'Server error. Please try again later.';
+    }
+
+    return `Failed to ${operation}. Please try again.`;
   }
 }

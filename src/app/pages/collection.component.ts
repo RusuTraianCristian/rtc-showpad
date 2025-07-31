@@ -1,16 +1,17 @@
 import { Component, ChangeDetectionStrategy, inject, computed, signal, effect } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
+import { LazyImageComponent } from '../shared';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { forkJoin, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { PokemonFacade } from '../core/facades/pokemon.facade';
 import { PokemonService } from '../services/pokemon.service';
-import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
+import { CustomButtonComponent } from '../shared';
 import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
 
 @Component({
   selector: 'app-collection',
-  imports: [RouterLink, CustomButtonComponent, PokemonDetailsModalComponent],
+  imports: [CustomButtonComponent, LazyImageComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div>
@@ -45,26 +46,30 @@ import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
               Start collecting your favorite Pokemon! Browse the Pokemon list and add them to your collection.
             </p>
             <div class="flex justify-center">
-              <a
-                routerLink="/dashboard/pokemons"
+              <button
+                (click)="router.navigate(['/dashboard/pokemons'])"
                 class="inline-flex items-center justify-center min-h-[50px] px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-400 text-white font-medium text-lg rounded-lg shadow-lg hover:from-purple-700 hover:to-purple-500 transition-all duration-200"
               >
                 Explore Pokemon
                 <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                 </svg>
-              </a>
+              </button>
             </div>
           </div>
         </div>
       } @else {
         <!-- Collection tabs -->
         <div class="mb-6">
-          <nav class="flex space-x-1">
+          <nav class="flex space-x-1" role="tablist" aria-label="Collection categories">
             <button
               (click)="activeTab.set('all')"
               [class]="getTabClass('all')"
               type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab() === 'all'"
+              [attr.aria-controls]="'tabpanel-all'"
+              id="tab-all"
             >
               All ({{ allCollectionPokemon().length }})
             </button>
@@ -72,6 +77,10 @@ import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
               (click)="activeTab.set('caught')"
               [class]="getTabClass('caught')"
               type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab() === 'caught'"
+              [attr.aria-controls]="'tabpanel-caught'"
+              id="tab-caught"
             >
               Caught ({{ pokemonFacade.caughtPokemonCount() }})
             </button>
@@ -79,6 +88,10 @@ import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
               (click)="activeTab.set('wishlist')"
               [class]="getTabClass('wishlist')"
               type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab() === 'wishlist'"
+              [attr.aria-controls]="'tabpanel-wishlist'"
+              id="tab-wishlist"
             >
               Wishlist ({{ pokemonFacade.wishlistPokemonCount() }})
             </button>
@@ -87,15 +100,27 @@ import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
 
         <!-- Pokemon Grid -->
         @if (isLoading()) {
-          <div class="flex justify-center items-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent"></div>
+          <div class="flex justify-center items-center py-12" role="status" aria-live="polite">
+            <div class="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent" aria-hidden="true"></div>
             <span class="ml-3 text-gray-600">Loading your collection...</span>
           </div>
         } @else {
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">            @for (pokemon of displayedPokemon(); track pokemon.id) {
-              <div class="rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow flex flex-col cursor-pointer"
-                   [class]="pokemonFacade.isPokemonCaught(pokemon.id) ? 'bg-green-50' : 'bg-pink-50'"
-                   (click)="openPokemonDetails(pokemon)">
+          <div
+            class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
+            role="tabpanel"
+            [attr.id]="'tabpanel-' + activeTab()"
+            [attr.aria-labelledby]="'tab-' + activeTab()"
+          >
+            @for (pokemon of displayedPokemon(); track pokemon.id) {
+              <article
+                class="rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow flex flex-col cursor-pointer"
+                [class]="pokemonFacade.isPokemonCaught(pokemon.id) ? 'bg-green-50' : 'bg-pink-50'"
+                (click)="openPokemonDetails(pokemon)"
+                (keydown.enter)="openPokemonDetails(pokemon)"
+                (keydown.space)="openPokemonDetails(pokemon)"
+                tabindex="0"
+                [attr.aria-label]="'Pokemon card for ' + pokemon.name + '. ' + (pokemonFacade.isPokemonCaught(pokemon.id) ? 'Caught Pokemon.' : 'Wishlist Pokemon.') + ' Click to view details.'"
+              >
 
                 <!-- Top Row: Name/ID left, Heart button right -->
                 <div class="flex items-start justify-between mb-3">
@@ -127,18 +152,20 @@ import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
                 <!-- Center: Pokemon Image -->
                 <div class="flex-1 flex items-center justify-center mb-3">
                   @if (pokemon.officialArtwork) {
-                    <img
+                    <app-lazy-image
                       [src]="pokemon.officialArtwork"
                       [alt]="pokemon.name"
-                      class="w-24 h-24 object-contain"
-                      loading="lazy"
+                      imageClass="w-24 h-24 object-contain"
+                      containerClass="w-24 h-24"
+                      placeholderClass="w-24 h-24"
                     />
                   } @else if (pokemon.imageUrl) {
-                    <img
+                    <app-lazy-image
                       [src]="pokemon.imageUrl"
                       [alt]="pokemon.name"
-                      class="w-24 h-24 object-contain"
-                      loading="lazy"
+                      imageClass="w-24 h-24 object-contain"
+                      containerClass="w-24 h-24"
+                      placeholderClass="w-24 h-24"
                     />
                   } @else {
                     <div class="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -187,36 +214,24 @@ import { Pokemon, UserPokemon } from '../core/models/pokemon.model';
                     }
                   </div>
                 </div>
-              </div>
+              </article>
             }
           </div>
         }
       }
     </div>
-
-    <!-- Pokemon Details Modal -->
-    <app-pokemon-details-modal
-      [pokemon]="selectedPokemon()"
-      (closeModal)="closePokemonDetails()"
-    />
   `
 })
 export class CollectionComponent {
   protected pokemonFacade = inject(PokemonFacade);
   private pokemonService = inject(PokemonService);
-
-  // Active tab signal
+  protected router = inject(Router);
   protected activeTab = signal<'all' | 'caught' | 'wishlist'>('all');
   protected isLoading = signal(false);
   protected collectionPokemon = signal<Pokemon[]>([]);
-  protected selectedPokemon = signal<Pokemon | null>(null);
-
-  // Get all collection Pokemon (caught + wishlist with full details)
   protected allCollectionPokemon = computed(() => {
     const userPokemons = this.pokemonFacade.userPokemons();
     const allUserPokemon = [...userPokemons.caught, ...userPokemons.wishlist];
-
-    // Remove duplicates (Pokemon that are both caught and wishlisted)
     const uniquePokemon = allUserPokemon.filter((pokemon, index, self) =>
       index === self.findIndex(p => p.id === pokemon.id)
     );
@@ -225,8 +240,6 @@ export class CollectionComponent {
       uniquePokemon.some(up => up.id === p.id)
     );
   });
-
-  // Filtered Pokemon based on active tab
   protected displayedPokemon = computed(() => {
     const userPokemons = this.pokemonFacade.userPokemons();
     const allPokemon = this.allCollectionPokemon();
@@ -247,9 +260,7 @@ export class CollectionComponent {
   });
 
   constructor() {
-    // Load full Pokemon details when user Pokemon changes
     effect(() => {
-      // This effect will run whenever userPokemons signal changes
       const userPokemons = this.pokemonFacade.userPokemons();
       this.loadCollectionDetails();
     });
@@ -267,10 +278,7 @@ export class CollectionComponent {
     this.isLoading.set(true);
 
     try {
-      // Get unique Pokemon IDs
       const uniqueIds = [...new Set(allUserPokemon.map(p => p.id))];
-
-      // Fetch full details for each Pokemon
       const pokemonDetails$ = uniqueIds.map(id =>
         this.pokemonService.getPokemonDetails(id)
       );
@@ -303,10 +311,6 @@ export class CollectionComponent {
   }
 
   protected openPokemonDetails(pokemon: Pokemon): void {
-    this.selectedPokemon.set(pokemon);
-  }
-
-  protected closePokemonDetails(): void {
-    this.selectedPokemon.set(null);
+    this.router.navigate(['/dashboard/pokemon', pokemon.id]);
   }
 }

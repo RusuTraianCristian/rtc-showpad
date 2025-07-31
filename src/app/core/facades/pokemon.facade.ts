@@ -17,8 +17,6 @@ export class PokemonFacade {
   private pokemonService = inject(PokemonService);
   private pokemonQuery = inject(PokemonQueryService);
   private appState = inject(AppStateService);
-
-  // Re-export user state for easy access
   readonly userPokemons = this.appState.userPokemons;
   readonly caughtPokemonCount = this.appState.caughtPokemonCount;
   readonly wishlistPokemonCount = this.appState.wishlistPokemonCount;
@@ -71,6 +69,13 @@ export class PokemonFacade {
    */
   searchPokemon(query: string): Observable<Pokemon[]> {
     return this.pokemonService.searchPokemon(query);
+  }
+
+  /**
+   * Get detailed information for a single Pokemon
+   */
+  getPokemonDetails(nameOrId: string | number): Observable<Pokemon | null> {
+    return this.pokemonService.getPokemonDetails(nameOrId);
   }
 
   /**

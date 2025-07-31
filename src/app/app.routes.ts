@@ -5,6 +5,7 @@ import { HomeComponent } from './pages/home.component';
 import { DashboardOverviewComponent } from './pages/dashboard-overview.component';
 import { PokemonsComponent } from './pages/pokemons.component';
 import { CollectionComponent } from './pages/collection.component';
+import { PokemonDetailComponent } from './pages/pokemon-detail.component';
 import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -29,6 +30,11 @@ export const routes: Routes = [
       {
         path: 'pokemons',
         component: PokemonsComponent,
+        canActivate: [authGuard]
+      },
+      {
+        path: 'pokemon/:id',
+        component: PokemonDetailComponent,
         canActivate: [authGuard]
       },
       {

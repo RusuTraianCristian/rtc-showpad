@@ -8,11 +8,6 @@ import { PokemonService } from './pokemon.service';
 import { AppStateService } from './app-state.service';
 import { Pokemon, UserPokemon, PaginatedPokemonResponse } from '../core/models/pokemon.model';
 
-/**
- * Pokemon Query Service using TanStack Query for optimized data fetching
- * This service bridges the PokemonService and AppStateService with caching,
- * background updates, and optimistic updates
- */
 @Injectable({
   providedIn: 'root'
 })
@@ -21,9 +16,6 @@ export class PokemonQueryService {
   private appState = inject(AppStateService);
   private queryClient = injectQueryClient();
 
-  /**
-   * Query for Pokemon list with caching and background updates
-   */
   pokemonListQuery(limit: number = 50, offset: number = 0) {
     return injectQuery(() => ({
       queryKey: ['pokemon-list', limit, offset],
@@ -35,8 +27,8 @@ export class PokemonQueryService {
           });
         });
       },
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
     }));
   }
 
@@ -92,30 +84,19 @@ export class PokemonQueryService {
           name: pokemon.name,
           imageUrl: pokemon.officialArtwork || pokemon.imageUrl
         };
-
-        // Simulate async operation (in real app, this might be an API call)
         await new Promise(resolve => setTimeout(resolve, 100));
 
         this.appState.addCaughtPokemon(userPokemon);
         return userPokemon;
       },
       onSuccess: (userPokemon) => {
-        // Invalidate related queries to refetch data
         this.queryClient.invalidateQueries({
           queryKey: ['user-pokemon']
         });
-
-        console.log(`Successfully caught ${userPokemon.name}!`);
-      },
-      onError: (error, pokemon) => {
-        console.error(`Failed to catch ${pokemon.name}:`, error);
       }
     }));
   }
 
-  /**
-   * Mutation for adding Pokemon to wishlist with optimistic updates
-   */
   addToWishlistMutation() {
     return injectMutation(() => ({
       mutationFn: async (pokemon: Pokemon): Promise<UserPokemon> => {
@@ -125,7 +106,6 @@ export class PokemonQueryService {
           imageUrl: pokemon.officialArtwork || pokemon.imageUrl
         };
 
-        // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 100));
 
         this.appState.addToWishlist(userPokemon);
@@ -135,22 +115,13 @@ export class PokemonQueryService {
         this.queryClient.invalidateQueries({
           queryKey: ['user-pokemon']
         });
-
-        console.log(`Successfully added ${userPokemon.name} to wishlist!`);
-      },
-      onError: (error, pokemon) => {
-        console.error(`Failed to add ${pokemon.name} to wishlist:`, error);
       }
     }));
   }
 
-  /**
-   * Mutation for releasing a Pokemon
-   */
   releasePokemonMutation() {
     return injectMutation(() => ({
       mutationFn: async (pokemonId: number): Promise<number> => {
-        // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 100));
 
         this.appState.removeCaughtPokemon(pokemonId);
@@ -160,22 +131,13 @@ export class PokemonQueryService {
         this.queryClient.invalidateQueries({
           queryKey: ['user-pokemon']
         });
-
-        console.log(`Successfully released Pokemon ${pokemonId}!`);
-      },
-      onError: (error, pokemonId) => {
-        console.error(`Failed to release Pokemon ${pokemonId}:`, error);
       }
     }));
   }
 
-  /**
-   * Mutation for removing from wishlist
-   */
   removeFromWishlistMutation() {
     return injectMutation(() => ({
       mutationFn: async (pokemonId: number): Promise<number> => {
-        // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 100));
 
         this.appState.removeFromWishlist(pokemonId);
@@ -185,33 +147,21 @@ export class PokemonQueryService {
         this.queryClient.invalidateQueries({
           queryKey: ['user-pokemon']
         });
-
-        console.log(`Successfully removed Pokemon ${pokemonId} from wishlist!`);
-      },
-      onError: (error, pokemonId) => {
-        console.error(`Failed to remove Pokemon ${pokemonId} from wishlist:`, error);
       }
     }));
   }
 
-  /**
-   * Query for user Pokemon data with real-time updates
-   */
   userPokemonQuery() {
     return injectQuery(() => ({
       queryKey: ['user-pokemon'],
       queryFn: async () => {
-        // Return current state as the source of truth
         return this.appState.userPokemons();
       },
-      staleTime: 0, // Always fresh since it's local state
-      gcTime: 30 * 60 * 1000, // 30 minutes
+      staleTime: 0,
+      gcTime: 30 * 60 * 1000,
     }));
   }
 
-  /**
-   * Utility method to prefetch Pokemon list for better UX
-   */
   prefetchPokemonList(limit: number = 50, offset: number = 0): void {
     this.queryClient.prefetchQuery({
       queryKey: ['pokemon-list', limit, offset],
@@ -227,9 +177,6 @@ export class PokemonQueryService {
     });
   }
 
-  /**
-   * Utility method to prefetch paginated Pokemon list for better UX
-   */
   prefetchPokemonPaginated(limit: number = 20, offset: number = 0): void {
     this.queryClient.prefetchQuery({
       queryKey: ['pokemon-paginated', limit, offset],
@@ -245,9 +192,6 @@ export class PokemonQueryService {
     });
   }
 
-  /**
-   * Utility method to invalidate all Pokemon queries
-   */
   invalidateAllPokemonQueries(): void {
     this.queryClient.invalidateQueries({
       queryKey: ['pokemon-list']

@@ -9,10 +9,10 @@ import { CustomButtonComponent } from './custom-button.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <!-- Modal Backdrop -->
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-description">
       <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-        <h2 class="text-2xl font-bold text-gray-900 mb-4 text-center">Welcome!</h2>
-        <p class="text-gray-600 mb-6 text-center">Please enter your name to continue</p>
+        <h2 id="modal-title" class="text-2xl font-bold text-gray-900 mb-4 text-center">Welcome!</h2>
+        <p id="modal-description" class="text-gray-600 mb-6 text-center">Please enter your name to continue</p>
 
         <div class="space-y-4">
           <div>
@@ -27,6 +27,9 @@ import { CustomButtonComponent } from './custom-button.component';
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
               [class.border-red-500]="nameControl.invalid && nameControl.touched"
               (keydown.enter)="saveUser()"
+              [attr.aria-invalid]="nameControl.invalid && nameControl.touched"
+              [attr.aria-describedby]="nameControl.invalid && nameControl.touched ? 'name-error' : null"
+              autofocus
             />
             @if (nameControl.invalid && nameControl.touched) {
               <p class="text-red-500 text-sm mt-1">Name is required</p>
@@ -61,29 +64,18 @@ export class UserModalComponent {
   saveUser(): void {
     if (this.nameControl.valid && this.nameControl.value?.trim()) {
       this.isSubmitting.set(true);
-      console.log('Starting user save process...');
 
       try {
         const name = this.nameControl.value.trim();
-        console.log('Attempting to save user to global state:', name);
         this.appState.setUser(name);
-
-        console.log('Global state setUser completed');
-        console.log('Global state hasUser():', this.appState.hasUser());
-        console.log('Global state userName():', this.appState.userName());
-        console.log('localStorage check:', localStorage.getItem('pokedex_user'));
-
         this.userSaved.emit(name);
-        console.log('userSaved event emitted');
       } catch (error) {
         console.error('Error saving user:', error);
-        // Could add error handling UI here
       } finally {
         this.isSubmitting.set(false);
       }
     } else {
       this.nameControl.markAsTouched();
-      console.log('Form validation failed');
     }
   }
 }

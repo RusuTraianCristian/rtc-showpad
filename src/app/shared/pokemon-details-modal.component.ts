@@ -138,12 +138,15 @@ import { CustomButtonComponent } from './custom-button.component';
             }
 
             <!-- Moves -->
-            @if (pokemon()!.moves && pokemon()!.moves.length > 0) {
+            @if (pokemon()!.moves && pokemon()!.moves!.length > 0) {
               <div class="space-y-4">
-                <h3 class="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">Moves (First 20)</h3>
+                <div class="flex items-center justify-between">
+                  <h3 class="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">Moves</h3>
+                  <span class="text-sm text-gray-500">Showing {{ pokemon()!.moves!.length }} moves</span>
+                </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  @for (move of pokemon()!.moves; track move.name) {
+                  @for (move of pokemon()!.moves!; track move.name) {
                     <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div class="flex-1">
                         <span class="font-medium text-gray-900 capitalize">{{ formatMoveName(move.name) }}</span>

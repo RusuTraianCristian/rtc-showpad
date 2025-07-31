@@ -27,14 +27,11 @@ export class UserService {
       }
 
       const parsed = JSON.parse(storedData) as UserData;
-
-      // Validate the structure
       if (!this.isValidUserData(parsed)) {
         console.warn('Invalid user data structure in localStorage');
         return of(null).pipe(delay(300));
       }
 
-      console.log('Retrieved user data from localStorage:', parsed);
       return of(parsed).pipe(delay(300));
     } catch (error) {
       console.error('Failed to read user data from localStorage:', error);
@@ -53,7 +50,6 @@ export class UserService {
       }
 
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(userData));
-      console.log('User data saved to localStorage:', userData);
       return of(void 0).pipe(delay(200)); // Simulate network delay
     } catch (error) {
       console.error('Failed to save user data to localStorage:', error);
@@ -68,7 +64,6 @@ export class UserService {
   deleteUserData(): Observable<void> {
     try {
       localStorage.removeItem(this.STORAGE_KEY);
-      console.log('User data removed from localStorage');
       return of(void 0).pipe(delay(200));
     } catch (error) {
       console.error('Failed to remove user data from localStorage:', error);
@@ -95,8 +90,6 @@ export class UserService {
     if (!data || typeof data !== 'object') {
       return false;
     }
-
-    // Check required fields
     if (!data.name || typeof data.name !== 'string') {
       return false;
     }
@@ -104,14 +97,10 @@ export class UserService {
     if (!data.pokemons || typeof data.pokemons !== 'object') {
       return false;
     }
-
-    // Check Pokemon data structure
     const { caught, wishlist } = data.pokemons;
     if (!Array.isArray(caught) || !Array.isArray(wishlist)) {
       return false;
     }
-
-    // Validate Pokemon objects in arrays
     const isValidPokemonArray = (arr: any[]) => {
       return arr.every(pokemon =>
         pokemon &&

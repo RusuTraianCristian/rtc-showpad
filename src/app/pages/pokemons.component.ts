@@ -1,12 +1,14 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
+import { LazyImageComponent } from '../shared';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { PokemonFacade, Pokemon, PaginatedPokemonResponse } from '../core';
-import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
+import { CustomButtonComponent } from '../shared';
 
 @Component({
   selector: 'app-pokemons',
-  imports: [FormsModule, CommonModule, CustomButtonComponent, PokemonDetailsModalComponent],
+  imports: [FormsModule, CommonModule, CustomButtonComponent, LazyImageComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div>
@@ -14,7 +16,13 @@ import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
         <h2 class="text-3xl font-bold text-gray-900">Pokemons</h2>
         <div class="text-sm text-gray-600">
           @if (isSearching()) {
-            Showing {{ displayedPokemonList().length }} search results
+            @if (selectedTypes().size > 0) {
+              Showing {{ displayedPokemonList().length }} filtered search results
+            } @else {
+              Showing {{ displayedPokemonList().length }} search results
+            }
+          } @else if (selectedTypes().size > 0) {
+            Showing {{ displayedPokemonList().length }} of {{ allPokemonList().length }} Pokemon (filtered)
           } @else {
             Showing {{ allPokemonList().length }}{{ totalPokemonCount() > 0 ? ' of ' + totalPokemonCount() : '' }} Pokemon
           }
@@ -23,32 +31,79 @@ import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
 
       <!-- Search Bar -->
       <div class="mb-6">
+        <label for="pokemon-search" class="sr-only">Search Pokemon by name</label>
         <div class="relative">
           <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
             </svg>
           </div>
           <input
+            id="pokemon-search"
             type="text"
             [ngModel]="searchQuery()"
             (ngModelChange)="onSearchChange($event)"
             placeholder="Search Pokemon by name..."
             class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            [attr.aria-describedby]="searchQuery() ? 'search-results-count' : null"
+            aria-label="Search Pokemon by name"
           />
           @if (searchQuery()) {
             <button
               type="button"
               (click)="clearSearch()"
               class="absolute inset-y-0 right-0 pr-3 flex items-center"
+              aria-label="Clear search"
+              title="Clear search"
             >
-              <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
             </button>
           }
         </div>
+        @if (searchQuery()) {
+          <div id="search-results-count" class="sr-only" aria-live="polite">
+            {{ displayedPokemonList().length }} search results found
+          </div>
+        }
       </div>
+
+      <!-- Type Filters -->
+      @if (availableTypes().length > 0) {
+        <div class="mb-6" role="group" aria-labelledby="type-filter-heading">
+          <div class="flex items-center gap-3 mb-3">
+            <h3 id="type-filter-heading" class="text-sm font-medium text-gray-700">Filter by Type:</h3>
+            @if (selectedTypes().size > 0) {
+              <button
+                type="button"
+                (click)="clearTypeFilters()"
+                class="text-xs text-blue-600 hover:text-blue-800 underline"
+                aria-label="Clear all type filters"
+              >
+                Clear filters
+              </button>
+            }
+          </div>
+          <div class="flex flex-wrap gap-2">
+            @for (type of availableTypes(); track type) {
+              <button
+                type="button"
+                (click)="toggleType(type)"
+                class="px-3 py-1 text-sm font-medium rounded-full transition-all duration-200 capitalize"
+                [class]="selectedTypes().has(type)
+                  ? pokemonFacade.getTypeClass(type) + ' ring-2 ring-offset-1 ring-gray-400'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                [attr.aria-pressed]="selectedTypes().has(type)"
+                [attr.aria-label]="'Filter by ' + type + ' type' + (selectedTypes().has(type) ? ', currently active' : '')"
+                role="button"
+              >
+                {{ type }}
+              </button>
+            }
+          </div>
+        </div>
+      }
 
       <!-- Loading State -->
       @if (isInitialLoading()) {
@@ -78,11 +133,18 @@ import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
 
       <!-- Pokemon Grid -->
       @else if (displayedPokemonList().length > 0) {
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6" role="grid" aria-label="Pokemon cards">
           @for (pokemon of displayedPokemonList(); track pokemon.id) {
-            <div class="rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow flex flex-col cursor-pointer"
-                 [class]="pokemonFacade.isPokemonCaught(pokemon.id) ? 'bg-green-50' : pokemonFacade.isPokemonInWishlist(pokemon.id) ? 'bg-pink-50' : 'bg-white'"
-                 (click)="openPokemonDetails(pokemon)">
+            <article
+              class="rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow flex flex-col cursor-pointer"
+              [class]="pokemonFacade.isPokemonCaught(pokemon.id) ? 'bg-green-50' : pokemonFacade.isPokemonInWishlist(pokemon.id) ? 'bg-pink-50' : 'bg-white'"
+              (click)="openPokemonDetails(pokemon)"
+              (keydown.enter)="openPokemonDetails(pokemon)"
+              (keydown.space)="openPokemonDetails(pokemon)"
+              tabindex="0"
+              role="gridcell"
+              [attr.aria-label]="'Pokemon card for ' + pokemon.name + '. ID: ' + pokemon.id + '. Types: ' + pokemon.types.join(', ') + '. ' + (pokemonFacade.isPokemonCaught(pokemon.id) ? 'Already caught.' : 'Not caught yet.') + ' Click to view details.'"
+            >
 
               <!-- Top Row: Name/ID left, Heart button right -->
               <div class="flex items-start justify-between mb-3">
@@ -114,22 +176,24 @@ import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
               <!-- Center: Pokemon Image -->
               <div class="flex-1 flex items-center justify-center mb-3">
                 @if (pokemon.officialArtwork) {
-                  <img
+                  <app-lazy-image
                     [src]="pokemon.officialArtwork"
-                    [alt]="pokemon.name"
-                    class="w-24 h-24 object-contain"
-                    loading="lazy"
+                    [alt]="pokemon.name + ' official artwork'"
+                    imageClass="w-24 h-24 object-contain"
+                    containerClass="w-24 h-24"
+                    placeholderClass="w-24 h-24"
                   />
                 } @else if (pokemon.imageUrl) {
-                  <img
+                  <app-lazy-image
                     [src]="pokemon.imageUrl"
-                    [alt]="pokemon.name"
-                    class="w-24 h-24 object-contain"
-                    loading="lazy"
+                    [alt]="pokemon.name + ' sprite'"
+                    imageClass="w-24 h-24 object-contain"
+                    containerClass="w-24 h-24"
+                    placeholderClass="w-24 h-24"
                   />
                 } @else {
-                  <div class="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div class="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center" role="img" [attr.aria-label]="'No image available for ' + pokemon.name">
+                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                     </svg>
                   </div>
@@ -163,7 +227,7 @@ import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
                   </app-custom-button>
                 </div>
               </div>
-            </div>
+            </article>
           }
         </div>
 
@@ -208,21 +272,12 @@ import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
         </div>
       }
     </div>
-
-    <!-- Pokemon Details Modal -->
-    <app-pokemon-details-modal
-      [pokemon]="selectedPokemon()"
-      (closeModal)="closePokemonDetails()"
-    />
   `
 })
 export class PokemonsComponent implements OnDestroy {
   protected pokemonFacade = inject(PokemonFacade);
-
-  // Constants for pagination
+  private router = inject(Router);
   private readonly POKEMON_PER_PAGE = 20;
-
-  // Component state signals
   private _allPokemonList = signal<Pokemon[]>([]);
   private _searchResults = signal<Pokemon[]>([]);
   private _isInitialLoading = signal<boolean>(true);
@@ -234,15 +289,30 @@ export class PokemonsComponent implements OnDestroy {
 
   searchQuery = signal('');
   private searchTimeout: any;
-  protected selectedPokemon = signal<Pokemon | null>(null);
-
-  // Computed values
+  protected selectedTypes = signal<Set<string>>(new Set());
   protected isSearching = computed(() => this.searchQuery().trim().length > 0);
-  protected displayedPokemonList = computed(() =>
-    this.isSearching() ? this._searchResults() : this._allPokemonList()
-  );
+  protected availableTypes = computed(() => {
+    const pokemonList = this.isSearching() ? this._searchResults() : this._allPokemonList();
+    const types = new Set<string>();
+    pokemonList.forEach(pokemon => {
+      pokemon.types.forEach(type => types.add(type));
+    });
+    return Array.from(types).sort();
+  });
 
-  // Expose signals for template
+  protected displayedPokemonList = computed(() => {
+    const pokemonList = this.isSearching() ? this._searchResults() : this._allPokemonList();
+    const selectedTypesSet = this.selectedTypes();
+
+    if (selectedTypesSet.size === 0) {
+      return pokemonList;
+    }
+
+    return pokemonList.filter(pokemon =>
+      pokemon.types.some(type => selectedTypesSet.has(type))
+    );
+  });
+
   protected allPokemonList = this._allPokemonList.asReadonly();
   protected isInitialLoading = this._isInitialLoading.asReadonly();
   protected isLoadingMore = this._isLoadingMore.asReadonly();
@@ -294,14 +364,11 @@ export class PokemonsComponent implements OnDestroy {
 
     this.pokemonFacade.loadPokemonListWithPagination(this.POKEMON_PER_PAGE, offset).subscribe({
       next: (response: PaginatedPokemonResponse) => {
-        // Append new Pokemon to existing list
         const currentList = this._allPokemonList();
         this._allPokemonList.set([...currentList, ...response.pokemon]);
         this._hasMore.set(response.hasMore);
         this._currentOffset.set(offset + this.POKEMON_PER_PAGE);
         this._isLoadingMore.set(false);
-
-        // Prefetch next page for better UX
         if (response.hasMore) {
           this.pokemonFacade.prefetchPokemonPaginated(this.POKEMON_PER_PAGE, offset + this.POKEMON_PER_PAGE);
         }
@@ -316,8 +383,6 @@ export class PokemonsComponent implements OnDestroy {
 
   onSearchChange(query: string): void {
     this.searchQuery.set(query);
-
-    // Debounce search to avoid too many API calls
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);
     }
@@ -352,6 +417,7 @@ export class PokemonsComponent implements OnDestroy {
   clearSearch(): void {
     this.searchQuery.set('');
     this._searchResults.set([]);
+    this.selectedTypes.set(new Set()); // Clear type filters when clearing search
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);
     }
@@ -365,11 +431,21 @@ export class PokemonsComponent implements OnDestroy {
     }
   }
 
-  openPokemonDetails(pokemon: Pokemon): void {
-    this.selectedPokemon.set(pokemon);
+  toggleType(type: string): void {
+    const currentTypes = new Set(this.selectedTypes());
+    if (currentTypes.has(type)) {
+      currentTypes.delete(type);
+    } else {
+      currentTypes.add(type);
+    }
+    this.selectedTypes.set(currentTypes);
   }
 
-  closePokemonDetails(): void {
-    this.selectedPokemon.set(null);
+  clearTypeFilters(): void {
+    this.selectedTypes.set(new Set());
+  }
+
+  openPokemonDetails(pokemon: Pokemon): void {
+    this.router.navigate(['/dashboard/pokemon', pokemon.id]);
   }
 }

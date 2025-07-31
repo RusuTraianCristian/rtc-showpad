@@ -1,5 +1,3 @@
-// Core Pokemon models shared across the application
-
 export interface Pokemon {
   id: number;
   name: string;
@@ -39,7 +37,6 @@ export interface UserPokemonData {
   wishlist: UserPokemon[];
 }
 
-// Paginated Pokemon response interface
 export interface PaginatedPokemonResponse {
   pokemon: Pokemon[];
   count: number;
@@ -53,7 +50,6 @@ export interface UserData {
   pokemons: UserPokemonData;
 }
 
-// PokeAPI response interfaces
 export interface PokemonListItem {
   name: string;
   url: string;
@@ -116,7 +112,6 @@ export interface PokemonDetails {
   }>;
 }
 
-// Move detail interfaces for additional move information
 export interface MoveDetails {
   id: number;
   name: string;

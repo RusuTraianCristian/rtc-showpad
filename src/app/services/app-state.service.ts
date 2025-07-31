@@ -1,25 +1,11 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
-
-export interface Pokemon {
-  id: number;
-  name: string;
-  imageUrl?: string;
-}
-
-export interface UserPokemonData {
-  caught: Pokemon[];
-  wishlist: Pokemon[];
-}
-
-export interface UserData {
-  name: string;
-  pokemons: UserPokemonData;
-}
+import { UserPokemon, UserPokemonData, UserData } from '../core/models/pokemon.model';
 
 export interface AppState {
   user: {
     name: string | null;
     isLoading: boolean;
+    isInitialized: boolean;
     pokemons: UserPokemonData;
   };
 }
@@ -39,11 +25,13 @@ export class AppStateService {
   // Private signals for state management
   private userNameSignal = signal<string | null>(null);
   private userLoadingSignal = signal<boolean>(false);
+  private userInitializedSignal = signal<boolean>(false);
   private userPokemonSignal = signal<UserPokemonData>(this.defaultPokemonData);
 
   // Public readonly computed signals
   readonly userName = this.userNameSignal.asReadonly();
   readonly userLoading = this.userLoadingSignal.asReadonly();
+  readonly userInitialized = this.userInitializedSignal.asReadonly();
   readonly userPokemons = this.userPokemonSignal.asReadonly();
 
   // Computed signal for user existence
@@ -57,6 +45,7 @@ export class AppStateService {
   readonly userState = computed(() => ({
     name: this.userNameSignal(),
     isLoading: this.userLoadingSignal(),
+    isInitialized: this.userInitializedSignal(),
     hasUser: this.hasUser(),
     pokemons: this.userPokemonSignal(),
     stats: {
@@ -78,15 +67,20 @@ export class AppStateService {
   }
 
   /**
-   * Initialize user state from localStorage
-   * This should be called in ngOnInit of components that need user state
+   * Initialize user state - called once on app startup
    */
-  initializeUserState(): void {
-    console.log('Starting user state initialization...');
+  async initialize(): Promise<void> {
+    if (this.userInitializedSignal()) {
+      return; // Already initialized
+    }
+
+    console.log('Initializing user state...');
     this.userLoadingSignal.set(true);
 
-    // Simulate loading delay for better UX
-    setTimeout(() => {
+    try {
+      // Simulate loading delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       console.log('Reading user data from localStorage...');
       const storedUserData = this.getUserDataFromStorage();
 
@@ -100,18 +94,26 @@ export class AppStateService {
         this.userPokemonSignal.set(this.defaultPokemonData);
       }
 
+      this.userInitializedSignal.set(true);
+      console.log('User state initialized successfully');
+    } catch (error) {
+      console.error('Error initializing user state:', error);
+      // Set default state on error
+      this.userNameSignal.set(null);
+      this.userPokemonSignal.set(this.defaultPokemonData);
+      this.userInitializedSignal.set(true);
+    } finally {
       this.userLoadingSignal.set(false);
+    }
+  }
 
-      console.log('User state initialized:', {
-        name: this.userNameSignal(),
-        hasUser: this.hasUser(),
-        pokemonStats: {
-          caught: this.caughtPokemonCount(),
-          wishlist: this.wishlistPokemonCount()
-        },
-        isLoading: false
-      });
-    }, 1000);
+  /**
+   * Initialize user state from localStorage (legacy method)
+   * @deprecated Use initialize() instead
+   */
+  initializeUserState(): void {
+    console.warn('initializeUserState() is deprecated, use initialize() instead');
+    this.initialize();
   }
 
   /**
@@ -152,7 +154,7 @@ export class AppStateService {
   /**
    * Add Pokemon to caught list
    */
-  addCaughtPokemon(pokemon: Pokemon): void {
+  addCaughtPokemon(pokemon: UserPokemon): void {
     const currentData = this.userPokemonSignal();
     const isAlreadyCaught = currentData.caught.some(p => p.id === pokemon.id);
 
@@ -182,7 +184,7 @@ export class AppStateService {
   /**
    * Add Pokemon to wishlist
    */
-  addToWishlist(pokemon: Pokemon): void {
+  addToWishlist(pokemon: UserPokemon): void {
     const currentData = this.userPokemonSignal();
     const isAlreadyInWishlist = currentData.wishlist.some(p => p.id === pokemon.id);
     const isAlreadyCaught = currentData.caught.some(p => p.id === pokemon.id);

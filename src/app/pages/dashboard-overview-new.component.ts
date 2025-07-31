@@ -1,6 +1,7 @@
-import { Component, inject, computed, ChangeDetectionStrategy, OnInit } from '@angular/core';
+import { Component, inject, computed, ChangeDetectionStrategy } from '@angular/core';
 import { AppStateService } from '../services/app-state.service';
-import { UserModalComponent } from '../shared/user-modal.component';
+import { UserModalComponent } from '../shared';
+import { UserPokemon } from '../core';
 
 @Component({
   selector: 'app-dashboard-overview',
@@ -21,7 +22,7 @@ import { UserModalComponent } from '../shared/user-modal.component';
     } @else if (showDashboard()) {
       <!-- Dashboard Content -->
       <div>
-        <h2 class="text-3xl font-bold text-gray-900 mb-6">Dashboard Overview</h2>
+        <h2 class="text-3xl font-bold text-gray-900 mb-6">Overview</h2>
 
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -152,7 +153,7 @@ import { UserModalComponent } from '../shared/user-modal.component';
     }
   `
 })
-export class DashboardOverviewComponent implements OnInit {
+export class DashboardOverviewComponent {
   protected appState = inject(AppStateService);
 
   // Computed signals for UI logic
@@ -164,11 +165,6 @@ export class DashboardOverviewComponent implements OnInit {
     !this.appState.userLoading() && this.appState.hasUser()
   );
 
-  ngOnInit(): void {
-    console.log('Dashboard component initializing...');
-    this.appState.initializeUserState();
-  }
-
   onUserSaved(userName: string): void {
     console.log('User saved from modal:', userName);
     this.appState.setUser(userName);
@@ -176,18 +172,20 @@ export class DashboardOverviewComponent implements OnInit {
 
   // Test methods for Pokemon operations (for demonstration)
   testAddCaughtPokemon(): void {
-    this.appState.addCaughtPokemon({
+    const testPokemon: UserPokemon = {
       id: 25,
       name: 'Pikachu',
       imageUrl: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png'
-    });
+    };
+    this.appState.addCaughtPokemon(testPokemon);
   }
 
   testAddToWishlist(): void {
-    this.appState.addToWishlist({
+    const testPokemon: UserPokemon = {
       id: 6,
       name: 'Charizard',
       imageUrl: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png'
-    });
+    };
+    this.appState.addToWishlist(testPokemon);
   }
 }

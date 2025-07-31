@@ -1,5 +1,7 @@
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { UserPokemon, UserPokemonData, UserData } from '../core/models/pokemon.model';
+import { UserService } from './user.service';
 
 export interface AppState {
   user: {
@@ -10,11 +12,15 @@ export interface AppState {
   };
 }
 
+/**
+ * AppStateService manages application state using Angular signals
+ * This service focuses purely on state management and delegates data operations to services
+ */
 @Injectable({
   providedIn: 'root'
 })
 export class AppStateService {
-  private readonly STORAGE_KEY = 'pokedex_user_data';
+  private userService = inject(UserService);
 
   // Default Pokemon data structure
   private readonly defaultPokemonData: UserPokemonData = {
@@ -55,19 +61,24 @@ export class AppStateService {
   }));
 
   constructor() {
-    // Effect to sync state changes to localStorage
+    // Effect to sync state changes to UserService
     effect(() => {
       const userName = this.userNameSignal();
       const pokemonData = this.userPokemonSignal();
 
       if (userName !== null) {
-        this.saveUserDataToStorage({ name: userName, pokemons: pokemonData });
+        const userData: UserData = { name: userName, pokemons: pokemonData };
+        this.userService.saveUserData(userData).subscribe({
+          next: () => console.log('User data synced to storage'),
+          error: (error) => console.error('Failed to sync user data:', error)
+        });
       }
     });
   }
 
   /**
    * Initialize user state - called once on app startup
+   * Uses UserService to load data
    */
   async initialize(): Promise<void> {
     if (this.userInitializedSignal()) {
@@ -78,16 +89,12 @@ export class AppStateService {
     this.userLoadingSignal.set(true);
 
     try {
-      // Simulate loading delay for better UX
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const userData = await firstValueFrom(this.userService.getUserData());
 
-      console.log('Reading user data from localStorage...');
-      const storedUserData = this.getUserDataFromStorage();
-
-      if (storedUserData) {
-        console.log('Found stored user data:', storedUserData);
-        this.userNameSignal.set(storedUserData.name);
-        this.userPokemonSignal.set(storedUserData.pokemons);
+      if (userData) {
+        console.log('Found stored user data:', userData);
+        this.userNameSignal.set(userData.name);
+        this.userPokemonSignal.set(userData.pokemons);
       } else {
         console.log('No stored user data found');
         this.userNameSignal.set(null);
@@ -105,15 +112,6 @@ export class AppStateService {
     } finally {
       this.userLoadingSignal.set(false);
     }
-  }
-
-  /**
-   * Initialize user state from localStorage (legacy method)
-   * @deprecated Use initialize() instead
-   */
-  initializeUserState(): void {
-    console.warn('initializeUserState() is deprecated, use initialize() instead');
-    this.initialize();
   }
 
   /**
@@ -142,13 +140,17 @@ export class AppStateService {
   }
 
   /**
-   * Clear user from state and localStorage
+   * Clear user from state and storage
    */
   clearUser(): void {
     console.log('Clearing user from global state');
     this.userNameSignal.set(null);
     this.userPokemonSignal.set(this.defaultPokemonData);
-    this.removeUserDataFromStorage();
+
+    this.userService.deleteUserData().subscribe({
+      next: () => console.log('User data cleared from storage'),
+      error: (error) => console.error('Failed to clear user data:', error)
+    });
   }
 
   /**
@@ -211,62 +213,11 @@ export class AppStateService {
   }
 
   /**
-   * Get user data from localStorage
+   * Legacy method for backward compatibility
+   * @deprecated Use initialize() instead
    */
-  private getUserDataFromStorage(): UserData | null {
-    try {
-      const storedData = localStorage.getItem(this.STORAGE_KEY);
-      if (!storedData) {
-        return null;
-      }
-
-      const parsed = JSON.parse(storedData) as UserData;
-
-      // Validate the structure
-      if (!parsed.name || !parsed.pokemons) {
-        console.warn('Invalid user data structure in localStorage');
-        return null;
-      }
-
-      // Ensure pokemons has correct structure
-      if (!Array.isArray(parsed.pokemons.caught) || !Array.isArray(parsed.pokemons.wishlist)) {
-        console.warn('Invalid Pokemon data structure in localStorage');
-        return {
-          name: parsed.name,
-          pokemons: this.defaultPokemonData
-        };
-      }
-
-      console.log('Retrieved user data from localStorage:', parsed);
-      return parsed;
-    } catch (error) {
-      console.warn('Failed to read user data from localStorage:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Save user data to localStorage
-   */
-  private saveUserDataToStorage(userData: UserData): void {
-    try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(userData));
-      console.log('User data saved to localStorage:', userData);
-    } catch (error) {
-      console.error('Failed to save user data to localStorage:', error);
-      throw new Error('Unable to save user data');
-    }
-  }
-
-  /**
-   * Remove user data from localStorage
-   */
-  private removeUserDataFromStorage(): void {
-    try {
-      localStorage.removeItem(this.STORAGE_KEY);
-      console.log('User data removed from localStorage');
-    } catch (error) {
-      console.warn('Failed to remove user data from localStorage:', error);
-    }
+  initializeUserState(): void {
+    console.warn('initializeUserState() is deprecated, use initialize() instead');
+    this.initialize();
   }
 }

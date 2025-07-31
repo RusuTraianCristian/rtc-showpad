@@ -1,11 +1,12 @@
 import { Component, inject, computed, ChangeDetectionStrategy } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AppStateService } from '../services/app-state.service';
-import { UserModalComponent } from '../shared';
+import { UserModalComponent, CustomButtonComponent, StatCardComponent } from '../shared';
 import { UserPokemon } from '../core';
 
 @Component({
   selector: 'app-dashboard-overview',
-  imports: [UserModalComponent],
+  imports: [RouterLink, UserModalComponent, CustomButtonComponent, StatCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (appState.userLoading()) {
@@ -25,22 +26,19 @@ import { UserPokemon } from '../core';
         <h2 class="text-3xl font-bold text-gray-900 mb-6">Overview</h2>
 
         <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">Total Pokemon</h3>
-            <p class="text-3xl font-bold text-blue-600">1,010</p>
-            <p class="text-sm text-gray-500 mt-1">Available to catch</p>
-          </div>
-          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">Caught Pokemon</h3>
-            <p class="text-3xl font-bold text-green-600">{{ appState.caughtPokemonCount() }}</p>
-            <p class="text-sm text-gray-500 mt-1">In your collection</p>
-          </div>
-          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">Wishlist</h3>
-            <p class="text-3xl font-bold text-purple-600">{{ appState.wishlistPokemonCount() }}</p>
-            <p class="text-sm text-gray-500 mt-1">Pokemon you want</p>
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <app-stat-card
+            title="Caught Pokemon"
+            [value]="appState.caughtPokemonCount()"
+            description="In your collection"
+            numberColor="#16a34a"
+          />
+          <app-stat-card
+            title="Wishlist"
+            [value]="appState.wishlistPokemonCount()"
+            description="Pokemon you want"
+            numberColor="#9333ea"
+          />
         </div>
 
         <!-- Recent Activity / Getting Started -->
@@ -61,8 +59,8 @@ import { UserPokemon } from '../core';
               </p>
               <div class="flex justify-center gap-4">
                 <a
-                  href="/dashboard/pokemons"
-                  class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  routerLink="/dashboard/pokemons"
+                  class="inline-flex items-center justify-center min-h-[50px] px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-400 text-white font-medium text-lg rounded-lg shadow-lg hover:from-purple-700 hover:to-purple-500 transition-all duration-200"
                 >
                   Explore Pokemon
                 </a>
@@ -98,18 +96,6 @@ import { UserPokemon } from '../core';
                   <span class="text-sm font-semibold text-purple-600">{{ appState.wishlistPokemonCount() }} Pokemon</span>
                 </div>
               }
-
-              <div class="flex items-center justify-between py-3">
-                <div class="flex items-center">
-                  <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                    </svg>
-                  </div>
-                  <span class="text-gray-700">Progress</span>
-                </div>
-                <span class="text-sm font-semibold text-blue-600">{{ ((appState.caughtPokemonCount() / 1010) * 100).toFixed(1) }}% Complete</span>
-              </div>
             </div>
           }
         </div>
@@ -133,18 +119,18 @@ import { UserPokemon } from '../core';
             <div class="mt-6 space-y-2">
               <p class="text-sm font-semibold text-gray-700">Test Pokemon Operations:</p>
               <div class="flex gap-2 justify-center">
-                <button
-                  (click)="testAddCaughtPokemon()"
-                  class="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                <app-custom-button
+                  (buttonClick)="testAddCaughtPokemon()"
+                  additionalClasses="!h-8 !line-height-8 !text-xs !px-3"
                 >
                   Catch Pikachu
-                </button>
-                <button
-                  (click)="testAddToWishlist()"
-                  class="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
+                </app-custom-button>
+                <app-custom-button
+                  (buttonClick)="testAddToWishlist()"
+                  additionalClasses="!h-8 !line-height-8 !text-xs !px-3"
                 >
                   Wishlist Charizard
-                </button>
+                </app-custom-button>
               </div>
             </div>
           }

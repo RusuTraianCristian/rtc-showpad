@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 import { MainLayoutComponent } from './layouts/main-layout.component';
 import { DashboardLayoutComponent } from './layouts/dashboard-layout.component';
 import { HomeComponent } from './pages/home.component';
-import { DashboardOverviewComponent } from './pages/dashboard-overview-new.component';
+import { DashboardOverviewComponent } from './pages/dashboard-overview.component';
 import { PokemonsComponent } from './pages/pokemons.component';
 import { CollectionComponent } from './pages/collection.component';
 import { authGuard } from './guards/auth.guard';

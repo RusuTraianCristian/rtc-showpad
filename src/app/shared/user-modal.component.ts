@@ -1,10 +1,11 @@
 import { Component, output, signal, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AppStateService } from '../services/app-state.service';
+import { CustomButtonComponent } from './custom-button.component';
 
 @Component({
   selector: 'app-user-modal',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, CustomButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <!-- Modal Backdrop -->
@@ -33,18 +34,16 @@ import { AppStateService } from '../services/app-state.service';
           </div>
 
           <div class="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              (click)="saveUser()"
+            <app-custom-button
+              (buttonClick)="saveUser()"
               [disabled]="nameControl.invalid || isSubmitting()"
-              class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
               @if (isSubmitting()) {
                 <span>Saving...</span>
               } @else {
                 <span>Continue</span>
               }
-            </button>
+            </app-custom-button>
           </div>
         </div>
       </div>

@@ -1,10 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed, effect, ChangeDetectionStrategy } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { AppStateService } from '../services/app-state.service';
+import { CustomButtonComponent } from '../shared/custom-button.component';
 
 @Component({
   selector: 'app-dashboard-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, CustomButtonComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gray-50 flex">
       <!-- Fixed Sidebar -->
@@ -17,7 +19,7 @@ import { AppStateService } from '../services/app-state.service';
         <div class="p-4 border-b border-gray-700">
           <div class="flex items-center justify-between">
             @if (sidebarOpen()) {
-              <h1 class="text-xl font-bold">Pokedex</h1>
+              <h1 class="text-xl font-bold cursor-pointer hover:text-gray-300 transition-colors" (click)="navigateToHome()">Pokedex</h1>
             }
             <button
               (click)="toggleSidebar()"
@@ -106,9 +108,9 @@ import { AppStateService } from '../services/app-state.service';
         [class.ml-16]="!sidebarOpen()"
       >
         <!-- Header -->
-        <header class="bg-white shadow-sm border-b border-gray-200">
-          <div class="px-6 py-4">
-            <div class="flex items-center justify-between">
+        <header class="bg-white shadow-sm border-b border-gray-200 h-[70px]">
+          <div class="px-6 py-4 h-full">
+            <div class="flex items-center justify-between h-full">
               <div class="flex items-center">
                 <h2 class="text-2xl font-semibold text-gray-900">Dashboard</h2>
               </div>
@@ -121,12 +123,12 @@ import { AppStateService } from '../services/app-state.service';
                     <p class="text-lg font-semibold text-gray-900">{{ appState.userName() }}!</p>
                   </div>
                 }
-                <button
-                  (click)="disconnect()"
-                  class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                <app-custom-button
+                  variant="muted"
+                  (buttonClick)="disconnect()"
                 >
                   Disconnect
-                </button>
+                </app-custom-button>
               </div>
             </div>
           </div>
@@ -144,11 +146,57 @@ export class DashboardLayoutComponent {
   protected appState = inject(AppStateService);
   private router = inject(Router);
 
-  // Sidebar toggle state
-  protected sidebarOpen = signal(true);
+  // Window width signal for responsive behavior
+  private windowWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1024);
+
+  // Track the current screen size category (desktop/mobile)
+  private isDesktop = signal(typeof window !== 'undefined' ? window.innerWidth >= 800 : true);
+
+  // Track if user has manually toggled sidebar within current screen size category
+  private userHasToggled = signal(false);
+
+  // Computed signal for default sidebar state based on screen size
+  private defaultSidebarOpen = computed(() => this.windowWidth() >= 800);
+
+  // Sidebar toggle state - starts with responsive default
+  protected sidebarOpen = signal(typeof window !== 'undefined' ? window.innerWidth >= 800 : true);
+
+  constructor() {
+    // Listen for window resize events
+    if (typeof window !== 'undefined') {
+      const handleResize = () => {
+        this.windowWidth.set(window.innerWidth);
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      // Update sidebar state when screen size changes
+      effect(() => {
+        const currentIsDesktop = this.windowWidth() >= 800;
+        const wasDesktop = this.isDesktop();
+
+        // If we've crossed the breakpoint (desktop <-> mobile), reset manual toggle flag
+        if (currentIsDesktop !== wasDesktop) {
+          this.userHasToggled.set(false);
+          this.isDesktop.set(currentIsDesktop);
+        }
+
+        // Update sidebar state if user hasn't manually toggled in current screen size category
+        if (!this.userHasToggled()) {
+          const defaultState = this.defaultSidebarOpen();
+          this.sidebarOpen.set(defaultState);
+        }
+      });
+    }
+  }
 
   protected toggleSidebar(): void {
+    this.userHasToggled.set(true);
     this.sidebarOpen.update(open => !open);
+  }
+
+  protected navigateToHome(): void {
+    this.router.navigate(['/']);
   }
 
   disconnect(): void {

@@ -1,18 +1,23 @@
-import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { PokemonFacade, Pokemon } from '../core';
+import { PokemonFacade, Pokemon, PaginatedPokemonResponse } from '../core';
+import { CustomButtonComponent, PokemonDetailsModalComponent } from '../shared';
 
 @Component({
   selector: 'app-pokemons',
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, CustomButtonComponent, PokemonDetailsModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div>
       <div class="flex items-center justify-between mb-6">
-        <h2 class="text-3xl font-bold text-gray-900">Pokemon Collection</h2>
+        <h2 class="text-3xl font-bold text-gray-900">Pokemons</h2>
         <div class="text-sm text-gray-600">
-          Showing {{ pokemonList().length }} Pokemon
+          @if (isSearching()) {
+            Showing {{ displayedPokemonList().length }} search results
+          } @else {
+            Showing {{ allPokemonList().length }}{{ totalPokemonCount() > 0 ? ' of ' + totalPokemonCount() : '' }} Pokemon
+          }
         </div>
       </div>
 
@@ -26,16 +31,27 @@ import { PokemonFacade, Pokemon } from '../core';
           </div>
           <input
             type="text"
-            [(ngModel)]="searchQuery"
-            (input)="onSearchChange()"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="onSearchChange($event)"
             placeholder="Search Pokemon by name..."
-            class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           />
+          @if (searchQuery()) {
+            <button
+              type="button"
+              (click)="clearSearch()"
+              class="absolute inset-y-0 right-0 pr-3 flex items-center"
+            >
+              <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          }
         </div>
       </div>
 
       <!-- Loading State -->
-      @if (loading()) {
+      @if (isInitialLoading()) {
         <div class="flex items-center justify-center py-12">
           <div class="text-center">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -54,38 +70,65 @@ import { PokemonFacade, Pokemon } from '../core';
           </div>
           <h3 class="text-lg font-semibold text-red-900 mb-2">Error Loading Pokemon</h3>
           <p class="text-red-700 mb-4">{{ error() }}</p>
-          <button
-            (click)="loadPokemon()"
-            class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-          >
+          <app-custom-button (buttonClick)="loadInitialPokemon()">
             Try Again
-          </button>
+          </app-custom-button>
         </div>
       }
 
       <!-- Pokemon Grid -->
-      @else if (pokemonList().length > 0) {
+      @else if (displayedPokemonList().length > 0) {
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          @for (pokemon of pokemonList(); track pokemon.id) {
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
-              <!-- Pokemon Image -->
-              <div class="text-center mb-3">
+          @for (pokemon of displayedPokemonList(); track pokemon.id) {
+            <div class="rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow flex flex-col cursor-pointer"
+                 [class]="pokemonFacade.isPokemonCaught(pokemon.id) ? 'bg-green-50' : pokemonFacade.isPokemonInWishlist(pokemon.id) ? 'bg-pink-50' : 'bg-white'"
+                 (click)="openPokemonDetails(pokemon)">
+
+              <!-- Top Row: Name/ID left, Heart button right -->
+              <div class="flex items-start justify-between mb-3">
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-lg font-semibold text-gray-900 capitalize truncate">{{ pokemon.name }}</h3>
+                  <p class="text-sm text-gray-500">#{{ pokemon.id.toString().padStart(3, '0') }}</p>
+                </div>
+                <div class="flex-shrink-0 ml-2" (click)="$event.stopPropagation()">
+                  @if (pokemonFacade.isPokemonCaught(pokemon.id)) {
+                    <!-- Show muted heart button when Pokemon is caught -->
+                    <app-custom-button
+                      variant="heart"
+                      [disabled]="true"
+                      [wishlisted]="pokemonFacade.isPokemonInWishlist(pokemon.id)"
+                    >
+                    </app-custom-button>
+                  } @else {
+                    <!-- Show heart toggle button when Pokemon is not caught -->
+                    <app-custom-button
+                      variant="heart"
+                      (buttonClick)="toggleWishlist(pokemon)"
+                      [wishlisted]="pokemonFacade.isPokemonInWishlist(pokemon.id)"
+                    >
+                    </app-custom-button>
+                  }
+                </div>
+              </div>
+
+              <!-- Center: Pokemon Image -->
+              <div class="flex-1 flex items-center justify-center mb-3">
                 @if (pokemon.officialArtwork) {
                   <img
                     [src]="pokemon.officialArtwork"
                     [alt]="pokemon.name"
-                    class="w-24 h-24 mx-auto object-contain"
+                    class="w-24 h-24 object-contain"
                     loading="lazy"
                   />
                 } @else if (pokemon.imageUrl) {
                   <img
                     [src]="pokemon.imageUrl"
                     [alt]="pokemon.name"
-                    class="w-24 h-24 mx-auto object-contain"
+                    class="w-24 h-24 object-contain"
                     loading="lazy"
                   />
                 } @else {
-                  <div class="w-24 h-24 mx-auto bg-gray-100 rounded-lg flex items-center justify-center">
+                  <div class="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center">
                     <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                     </svg>
@@ -93,55 +136,61 @@ import { PokemonFacade, Pokemon } from '../core';
                 }
               </div>
 
-              <!-- Pokemon Info -->
-              <div class="text-center">
-                <h3 class="text-lg font-semibold text-gray-900 mb-1 capitalize">{{ pokemon.name }}</h3>
-                <p class="text-sm text-gray-500 mb-2">#{{ pokemon.id.toString().padStart(3, '0') }}</p>
+              <!-- Pokemon Types (centered) -->
+              <div class="flex justify-center gap-1 mb-3">
+                @for (type of pokemon.types; track type) {
+                  <span class="px-2 py-1 text-xs font-medium rounded-full"
+                        [class]="pokemonFacade.getTypeClass(type)">
+                    {{ type }}
+                  </span>
+                }
+              </div>
 
-                <!-- Pokemon Types -->
-                <div class="flex justify-center gap-1 mb-3">
-                  @for (type of pokemon.types; track type) {
-                    <span class="px-2 py-1 text-xs font-medium rounded-full"
-                          [class]="pokemonFacade.getTypeClass(type)">
-                      {{ type }}
-                    </span>
-                  }
+              <!-- Bottom Row: Height/Weight left, Catch button right -->
+              <div class="flex items-center justify-between">
+                <div class="text-xs text-gray-600 space-y-1">
+                  <div>{{ (pokemon.height / 10).toFixed(1) }}m</div>
+                  <div>{{ (pokemon.weight / 10).toFixed(1) }}kg</div>
                 </div>
-
-                <!-- Pokemon Stats (height/weight) -->
-                <div class="text-xs text-gray-600 space-y-1 mb-3">
-                  <div>Height: {{ (pokemon.height / 10).toFixed(1) }}m</div>
-                  <div>Weight: {{ (pokemon.weight / 10).toFixed(1) }}kg</div>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="flex gap-2 justify-center">
-                  <button
-                    (click)="pokemonFacade.catchPokemon(pokemon)"
+                <div class="flex-shrink-0" (click)="$event.stopPropagation()">
+                  <app-custom-button
+                    (buttonClick)="pokemonFacade.catchPokemon(pokemon)"
+                    [variant]="pokemonFacade.isPokemonCaught(pokemon.id) ? 'muted' : 'normal'"
                     [disabled]="pokemonFacade.isPokemonCaught(pokemon.id)"
-                    [class]="pokemonFacade.isPokemonCaught(pokemon.id)
-                      ? 'bg-green-100 text-green-600 cursor-not-allowed'
-                      : 'bg-green-500 text-white hover:bg-green-600'"
-                    class="px-3 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-75"
+                    additionalClasses="!h-8 !line-height-8 !text-xs !px-3"
                   >
                     {{ pokemonFacade.isPokemonCaught(pokemon.id) ? 'Caught' : 'Catch' }}
-                  </button>
-
-                  <button
-                    (click)="pokemonFacade.addToWishlist(pokemon)"
-                    [disabled]="pokemonFacade.isPokemonInWishlist(pokemon.id) || pokemonFacade.isPokemonCaught(pokemon.id)"
-                    [class]="pokemonFacade.isPokemonInWishlist(pokemon.id) || pokemonFacade.isPokemonCaught(pokemon.id)
-                      ? 'bg-blue-100 text-blue-600 cursor-not-allowed'
-                      : 'bg-blue-500 text-white hover:bg-blue-600'"
-                    class="px-3 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-75"
-                  >
-                    {{ pokemonFacade.isPokemonInWishlist(pokemon.id) ? 'In Wishlist' : 'Wishlist' }}
-                  </button>
+                  </app-custom-button>
                 </div>
               </div>
             </div>
           }
         </div>
+
+        <!-- Load More Button -->
+        @if (hasMore() && !isSearching()) {
+          <div class="text-center mt-8">
+            <app-custom-button
+              (buttonClick)="loadMorePokemon()"
+              [disabled]="isLoadingMore()"
+              additionalClasses="!px-8 !py-3"
+            >
+              @if (isLoadingMore()) {
+                <div class="flex items-center gap-2">
+                  <div class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  Loading...
+                </div>
+              } @else {
+                Load More Pokemon
+              }
+            </app-custom-button>
+            @if (totalPokemonCount() > 0) {
+              <p class="text-sm text-gray-500 mt-2">
+                {{ allPokemonList().length }} of {{ totalPokemonCount() }} Pokemon loaded
+              </p>
+            }
+          </div>
+        }
       }
 
       <!-- Empty State -->
@@ -154,47 +203,120 @@ import { PokemonFacade, Pokemon } from '../core';
           </div>
           <h3 class="text-lg font-semibold text-gray-900 mb-2">No Pokemon Found</h3>
           <p class="text-gray-600">
-            {{ searchQuery ? 'Try a different search term' : 'Unable to load Pokemon data' }}
+            {{ searchQuery() ? 'Try a different search term' : 'Unable to load Pokemon data' }}
           </p>
         </div>
       }
     </div>
+
+    <!-- Pokemon Details Modal -->
+    <app-pokemon-details-modal
+      [pokemon]="selectedPokemon()"
+      (closeModal)="closePokemonDetails()"
+    />
   `
 })
-export class PokemonsComponent {
+export class PokemonsComponent implements OnDestroy {
   protected pokemonFacade = inject(PokemonFacade);
 
-  // Component state signals
-  pokemonList = signal<Pokemon[]>([]);
-  loading = signal<boolean>(false);
-  error = signal<string | null>(null);
-  searchQuery = '';
+  // Constants for pagination
+  private readonly POKEMON_PER_PAGE = 20;
 
+  // Component state signals
+  private _allPokemonList = signal<Pokemon[]>([]);
+  private _searchResults = signal<Pokemon[]>([]);
+  private _isInitialLoading = signal<boolean>(true);
+  private _isLoadingMore = signal<boolean>(false);
+  private _error = signal<string | null>(null);
+  private _hasMore = signal<boolean>(true);
+  private _totalPokemonCount = signal<number>(0);
+  private _currentOffset = signal<number>(0);
+
+  searchQuery = signal('');
   private searchTimeout: any;
+  protected selectedPokemon = signal<Pokemon | null>(null);
+
+  // Computed values
+  protected isSearching = computed(() => this.searchQuery().trim().length > 0);
+  protected displayedPokemonList = computed(() =>
+    this.isSearching() ? this._searchResults() : this._allPokemonList()
+  );
+
+  // Expose signals for template
+  protected allPokemonList = this._allPokemonList.asReadonly();
+  protected isInitialLoading = this._isInitialLoading.asReadonly();
+  protected isLoadingMore = this._isLoadingMore.asReadonly();
+  protected error = this._error.asReadonly();
+  protected hasMore = this._hasMore.asReadonly();
+  protected totalPokemonCount = this._totalPokemonCount.asReadonly();
 
   constructor() {
-    // Load Pokemon on component initialization
-    this.loadPokemon();
+    this.loadInitialPokemon();
   }
 
-  loadPokemon(): void {
-    this.loading.set(true);
-    this.error.set(null);
+  ngOnDestroy(): void {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+  }
 
-    this.pokemonFacade.loadPokemonList(50, 0).subscribe({
-      next: (pokemon: Pokemon[]) => {
-        this.pokemonList.set(pokemon);
-        this.loading.set(false);
+  loadInitialPokemon(): void {
+    this._isInitialLoading.set(true);
+    this._error.set(null);
+    this._currentOffset.set(0);
+    this._allPokemonList.set([]);
+
+    this.pokemonFacade.loadPokemonListWithPagination(this.POKEMON_PER_PAGE, 0).subscribe({
+      next: (response: PaginatedPokemonResponse) => {
+        this._allPokemonList.set(response.pokemon);
+        this._hasMore.set(response.hasMore);
+        this._totalPokemonCount.set(response.count);
+        this._currentOffset.set(this.POKEMON_PER_PAGE);
+        this._isInitialLoading.set(false);
       },
       error: (err: any) => {
-        console.error('Error loading Pokemon:', err);
-        this.error.set('Failed to load Pokemon. Please try again.');
-        this.loading.set(false);
+        console.error('Error loading initial Pokemon:', err);
+        this._error.set('Failed to load Pokemon. Please try again.');
+        this._isInitialLoading.set(false);
       }
     });
   }
 
-  onSearchChange(): void {
+  loadMorePokemon(): void {
+    if (!this._hasMore() || this._isLoadingMore() || this.isSearching()) {
+      return;
+    }
+
+    this._isLoadingMore.set(true);
+    this._error.set(null);
+
+    const offset = this._currentOffset();
+
+    this.pokemonFacade.loadPokemonListWithPagination(this.POKEMON_PER_PAGE, offset).subscribe({
+      next: (response: PaginatedPokemonResponse) => {
+        // Append new Pokemon to existing list
+        const currentList = this._allPokemonList();
+        this._allPokemonList.set([...currentList, ...response.pokemon]);
+        this._hasMore.set(response.hasMore);
+        this._currentOffset.set(offset + this.POKEMON_PER_PAGE);
+        this._isLoadingMore.set(false);
+
+        // Prefetch next page for better UX
+        if (response.hasMore) {
+          this.pokemonFacade.prefetchPokemonPaginated(this.POKEMON_PER_PAGE, offset + this.POKEMON_PER_PAGE);
+        }
+      },
+      error: (err: any) => {
+        console.error('Error loading more Pokemon:', err);
+        this._error.set('Failed to load more Pokemon. Please try again.');
+        this._isLoadingMore.set(false);
+      }
+    });
+  }
+
+  onSearchChange(query: string): void {
+    this.searchQuery.set(query);
+
     // Debounce search to avoid too many API calls
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);
@@ -206,24 +328,48 @@ export class PokemonsComponent {
   }
 
   private performSearch(): void {
-    if (!this.searchQuery.trim()) {
-      this.loadPokemon();
+    if (!this.searchQuery().trim()) {
+      this._searchResults.set([]);
       return;
     }
 
-    this.loading.set(true);
-    this.error.set(null);
+    this._isInitialLoading.set(true);
+    this._error.set(null);
 
-    this.pokemonFacade.searchPokemon(this.searchQuery.trim()).subscribe({
+    this.pokemonFacade.searchPokemon(this.searchQuery().trim()).subscribe({
       next: (pokemon: Pokemon[]) => {
-        this.pokemonList.set(pokemon);
-        this.loading.set(false);
+        this._searchResults.set(pokemon);
+        this._isInitialLoading.set(false);
       },
       error: (err: any) => {
         console.error('Error searching Pokemon:', err);
-        this.error.set('Failed to search Pokemon. Please try again.');
-        this.loading.set(false);
+        this._error.set('Failed to search Pokemon. Please try again.');
+        this._isInitialLoading.set(false);
       }
     });
+  }
+
+  clearSearch(): void {
+    this.searchQuery.set('');
+    this._searchResults.set([]);
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+    }
+  }
+
+  toggleWishlist(pokemon: Pokemon): void {
+    if (this.pokemonFacade.isPokemonInWishlist(pokemon.id)) {
+      this.pokemonFacade.removeFromWishlist(pokemon.id);
+    } else {
+      this.pokemonFacade.addToWishlist(pokemon);
+    }
+  }
+
+  openPokemonDetails(pokemon: Pokemon): void {
+    this.selectedPokemon.set(pokemon);
+  }
+
+  closePokemonDetails(): void {
+    this.selectedPokemon.set(null);
   }
 }

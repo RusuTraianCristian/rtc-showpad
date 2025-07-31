@@ -1,89 +1,125 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable } from '@angular/core';
+import { Observable, of, throwError, delay } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
+import { UserData, UserPokemonData } from '../core/models/pokemon.model';
 
+/**
+ * UserService handles all user data operations
+ * This service abstracts localStorage operations and mimics API behavior
+ * with observables, making it easy to replace with real API calls later
+ */
 @Injectable({
   providedIn: 'root'
 })
 export class UserService {
-  private readonly STORAGE_KEY = 'pokedex_user';
-  private userNameSignal = signal<string | null>(this.getUserFromStorage());
-
-  // Public readonly signal for components to subscribe to
-  readonly userName = this.userNameSignal.asReadonly();
+  private readonly STORAGE_KEY = 'pokedex_user_data';
 
   /**
-   * Sets the user name and saves it to local storage
-   * @param name - The user's name to store
+   * Get user data from storage
+   * Returns observable to mimic API behavior
    */
-  setUser(name: string): void {
-    if (!name?.trim()) {
-      throw new Error('User name cannot be empty');
-    }
-
-    const trimmedName = name.trim();
-    this.saveUserToStorage(trimmedName);
-    this.userNameSignal.set(trimmedName);
-  }
-
-  /**
-   * Gets the current user name
-   * @returns The user's name or null if no user is set
-   */
-  getUser(): string | null {
-    return this.userNameSignal();
-  }
-
-  /**
-   * Checks if a user is currently set
-   * @returns True if a user exists, false otherwise
-   */
-  hasUser(): boolean {
-    return this.userNameSignal() !== null;
-  }
-
-  /**
-   * Removes the user from local storage and resets the signal
-   */
-  clearUser(): void {
-    this.removeUserFromStorage();
-    this.userNameSignal.set(null);
-  }
-
-  /**
-   * Reads user from local storage
-   * @private
-   */
-  private getUserFromStorage(): string | null {
+  getUserData(): Observable<UserData | null> {
     try {
-      const storedUser = localStorage.getItem(this.STORAGE_KEY);
-      return storedUser && storedUser.trim() ? storedUser.trim() : null;
+      const storedData = localStorage.getItem(this.STORAGE_KEY);
+
+      if (!storedData) {
+        return of(null).pipe(delay(300)); // Simulate network delay
+      }
+
+      const parsed = JSON.parse(storedData) as UserData;
+
+      // Validate the structure
+      if (!this.isValidUserData(parsed)) {
+        console.warn('Invalid user data structure in localStorage');
+        return of(null).pipe(delay(300));
+      }
+
+      console.log('Retrieved user data from localStorage:', parsed);
+      return of(parsed).pipe(delay(300));
     } catch (error) {
-      console.warn('Failed to read user from localStorage:', error);
-      return null;
+      console.error('Failed to read user data from localStorage:', error);
+      return throwError(() => new Error('Failed to load user data'));
     }
   }
 
   /**
-   * Saves user to local storage
-   * @private
+   * Save user data to storage
+   * Returns observable to mimic API behavior
    */
-  private saveUserToStorage(name: string): void {
+  saveUserData(userData: UserData): Observable<void> {
     try {
-      localStorage.setItem(this.STORAGE_KEY, name);
+      if (!this.isValidUserData(userData)) {
+        return throwError(() => new Error('Invalid user data format'));
+      }
+
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(userData));
+      console.log('User data saved to localStorage:', userData);
+      return of(void 0).pipe(delay(200)); // Simulate network delay
     } catch (error) {
-      console.error('Failed to save user to localStorage:', error);
-      throw new Error('Unable to save user data');
+      console.error('Failed to save user data to localStorage:', error);
+      return throwError(() => new Error('Failed to save user data'));
     }
   }
 
   /**
-   * Removes user from local storage
-   * @private
+   * Delete user data from storage
+   * Returns observable to mimic API behavior
    */
-  private removeUserFromStorage(): void {
+  deleteUserData(): Observable<void> {
     try {
       localStorage.removeItem(this.STORAGE_KEY);
+      console.log('User data removed from localStorage');
+      return of(void 0).pipe(delay(200));
     } catch (error) {
-      console.warn('Failed to remove user from localStorage:', error);
+      console.error('Failed to remove user data from localStorage:', error);
+      return throwError(() => new Error('Failed to delete user data'));
     }
+  }
+
+  /**
+   * Check if user exists in storage
+   * Returns observable to mimic API behavior
+   */
+  userExists(): Observable<boolean> {
+    return this.getUserData().pipe(
+      delay(100),
+      map(userData => userData !== null),
+      catchError(() => of(false))
+    );
+  }
+
+  /**
+   * Validate user data structure
+   */
+  private isValidUserData(data: any): data is UserData {
+    if (!data || typeof data !== 'object') {
+      return false;
+    }
+
+    // Check required fields
+    if (!data.name || typeof data.name !== 'string') {
+      return false;
+    }
+
+    if (!data.pokemons || typeof data.pokemons !== 'object') {
+      return false;
+    }
+
+    // Check Pokemon data structure
+    const { caught, wishlist } = data.pokemons;
+    if (!Array.isArray(caught) || !Array.isArray(wishlist)) {
+      return false;
+    }
+
+    // Validate Pokemon objects in arrays
+    const isValidPokemonArray = (arr: any[]) => {
+      return arr.every(pokemon =>
+        pokemon &&
+        typeof pokemon.id === 'number' &&
+        typeof pokemon.name === 'string'
+      );
+    };
+
+    return isValidPokemonArray(caught) && isValidPokemonArray(wishlist);
   }
 }

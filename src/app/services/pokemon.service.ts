@@ -6,7 +6,8 @@ import {
   Pokemon,
   PokemonListItem,
   PokemonListResponse,
-  PokemonDetails
+  PokemonDetails,
+  PaginatedPokemonResponse
 } from '../core/models/pokemon.model';
 
 @Injectable({
@@ -44,7 +45,7 @@ export class PokemonService {
   }
 
   /**
-   * Get detailed information for multiple Pokemon
+   * Get detailed information for multiple Pokemon with pagination metadata
    */
   getPokemonListWithDetails(limit: number = 20, offset: number = 0): Observable<Pokemon[]> {
     return this.getPokemonList(limit, offset).pipe(
@@ -63,6 +64,54 @@ export class PokemonService {
       catchError(error => {
         console.error('Error fetching Pokemon list with details:', error);
         return of([]);
+      })
+    );
+  }
+
+  /**
+   * Get detailed information for multiple Pokemon with pagination metadata
+   */
+  getPokemonListWithPagination(limit: number = 20, offset: number = 0): Observable<PaginatedPokemonResponse> {
+    return this.getPokemonList(limit, offset).pipe(
+      switchMap(response => {
+        if (!response.results.length) {
+          return of({
+            pokemon: [],
+            count: response.count,
+            next: response.next,
+            previous: response.previous,
+            hasMore: false
+          });
+        }
+
+        // Extract Pokemon IDs from URLs for more efficient fetching
+        const pokemonRequests = response.results.map(pokemon => {
+          const id = this.extractIdFromUrl(pokemon.url);
+          return this.getPokemonDetails(id);
+        });
+
+        return forkJoin(pokemonRequests).pipe(
+          map((pokemonArray: (Pokemon | null)[]) => {
+            const filteredPokemon = pokemonArray.filter((pokemon): pokemon is Pokemon => pokemon !== null);
+            return {
+              pokemon: filteredPokemon,
+              count: response.count,
+              next: response.next,
+              previous: response.previous,
+              hasMore: response.next !== null
+            };
+          })
+        );
+      }),
+      catchError(error => {
+        console.error('Error fetching Pokemon list with pagination:', error);
+        return of({
+          pokemon: [],
+          count: 0,
+          next: null,
+          previous: null,
+          hasMore: false
+        });
       })
     );
   }
@@ -112,10 +161,28 @@ export class PokemonService {
       types: details.types.map(t => t.type.name),
       height: details.height,
       weight: details.weight,
+      baseExperience: details.base_experience,
+      abilities: details.abilities?.map(a => ({
+        name: a.ability.name,
+        isHidden: a.is_hidden
+      })),
+      sprites: {
+        frontShiny: details.sprites.front_shiny || undefined,
+        backDefault: details.sprites.back_default || undefined
+      },
       stats: details.stats.map(s => ({
         name: s.stat.name,
-        value: s.base_stat
-      }))
+        baseStat: s.base_stat
+      })),
+      moves: details.moves?.slice(0, 20).map(m => {
+        // Get the most recent version group details for level learned
+        const latestVersion = m.version_group_details[m.version_group_details.length - 1];
+        return {
+          name: m.move.name,
+          levelLearnedAt: latestVersion?.level_learned_at || undefined,
+          learnMethod: latestVersion?.move_learn_method.name || 'unknown'
+        };
+      })
     };
   }
 

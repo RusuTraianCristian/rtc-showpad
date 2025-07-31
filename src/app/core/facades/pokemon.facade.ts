@@ -1,18 +1,21 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { PokemonService } from '../../services/pokemon.service';
+import { PokemonQueryService } from '../../services/pokemon-query.service';
 import { AppStateService } from '../../services/app-state.service';
-import { Pokemon, UserPokemon } from '../models/pokemon.model';
+import { Pokemon, UserPokemon, PaginatedPokemonResponse } from '../models/pokemon.model';
 
 /**
  * Pokemon facade service that combines Pokemon API operations with user state management
  * This service provides a clean interface for components to interact with Pokemon data
+ * Following the layered architecture: Data Services → TanStack Query → State Management → UI Components
  */
 @Injectable({
   providedIn: 'root'
 })
 export class PokemonFacade {
   private pokemonService = inject(PokemonService);
+  private pokemonQuery = inject(PokemonQueryService);
   private appState = inject(AppStateService);
 
   // Re-export user state for easy access
@@ -22,21 +25,84 @@ export class PokemonFacade {
   readonly hasUser = this.appState.hasUser;
 
   /**
-   * Load a list of Pokemon with pagination
+   * Get Pokemon list query with caching and background updates
+   */
+  getPokemonListQuery(limit: number = 50, offset: number = 0) {
+    return this.pokemonQuery.pokemonListQuery(limit, offset);
+  }
+
+  /**
+   * Get paginated Pokemon list query with metadata
+   */
+  getPokemonPaginatedQuery(limit: number = 20, offset: number = 0) {
+    return this.pokemonQuery.pokemonPaginatedQuery(limit, offset);
+  }
+
+  /**
+   * Get Pokemon search query with debouncing and caching
+   */
+  getPokemonSearchQuery(query: string) {
+    return this.pokemonQuery.pokemonSearchQuery(query);
+  }
+
+  /**
+   * Get user Pokemon query
+   */
+  getUserPokemonQuery() {
+    return this.pokemonQuery.userPokemonQuery();
+  }
+
+  /**
+   * Load a list of Pokemon with pagination (fallback method)
    */
   loadPokemonList(limit: number = 50, offset: number = 0): Observable<Pokemon[]> {
     return this.pokemonService.getPokemonListWithDetails(limit, offset);
   }
 
   /**
-   * Search Pokemon by name
+   * Load a paginated list of Pokemon with metadata (fallback method)
+   */
+  loadPokemonListWithPagination(limit: number = 20, offset: number = 0): Observable<PaginatedPokemonResponse> {
+    return this.pokemonService.getPokemonListWithPagination(limit, offset);
+  }
+
+  /**
+   * Search Pokemon by name (fallback method)
    */
   searchPokemon(query: string): Observable<Pokemon[]> {
     return this.pokemonService.searchPokemon(query);
   }
 
   /**
-   * Add Pokemon to caught collection
+   * Get catch Pokemon mutation
+   */
+  getCatchPokemonMutation() {
+    return this.pokemonQuery.catchPokemonMutation();
+  }
+
+  /**
+   * Get add to wishlist mutation
+   */
+  getAddToWishlistMutation() {
+    return this.pokemonQuery.addToWishlistMutation();
+  }
+
+  /**
+   * Get release Pokemon mutation
+   */
+  getReleasePokemonMutation() {
+    return this.pokemonQuery.releasePokemonMutation();
+  }
+
+  /**
+   * Get remove from wishlist mutation
+   */
+  getRemoveFromWishlistMutation() {
+    return this.pokemonQuery.removeFromWishlistMutation();
+  }
+
+  /**
+   * Add Pokemon to caught collection (legacy method, prefer using mutation)
    */
   catchPokemon(pokemon: Pokemon): void {
     if (!this.hasUser()) {
@@ -54,7 +120,7 @@ export class PokemonFacade {
   }
 
   /**
-   * Add Pokemon to wishlist
+   * Add Pokemon to wishlist (legacy method, prefer using mutation)
    */
   addToWishlist(pokemon: Pokemon): void {
     if (!this.hasUser()) {
@@ -72,14 +138,14 @@ export class PokemonFacade {
   }
 
   /**
-   * Remove Pokemon from caught collection
+   * Remove Pokemon from caught collection (legacy method, prefer using mutation)
    */
   releasePokemon(pokemonId: number): void {
     this.appState.removeCaughtPokemon(pokemonId);
   }
 
   /**
-   * Remove Pokemon from wishlist
+   * Remove Pokemon from wishlist (legacy method, prefer using mutation)
    */
   removeFromWishlist(pokemonId: number): void {
     this.appState.removeFromWishlist(pokemonId);
@@ -125,5 +191,26 @@ export class PokemonFacade {
     };
 
     return typeClasses[type] || 'bg-gray-200 text-gray-800';
+  }
+
+  /**
+   * Prefetch Pokemon list for better UX
+   */
+  prefetchPokemonList(limit: number = 50, offset: number = 0): void {
+    this.pokemonQuery.prefetchPokemonList(limit, offset);
+  }
+
+  /**
+   * Prefetch paginated Pokemon list for better UX
+   */
+  prefetchPokemonPaginated(limit: number = 20, offset: number = 0): void {
+    this.pokemonQuery.prefetchPokemonPaginated(limit, offset);
+  }
+
+  /**
+   * Invalidate all Pokemon queries to force refresh
+   */
+  invalidateAllPokemonQueries(): void {
+    this.pokemonQuery.invalidateAllPokemonQueries();
   }
 }
